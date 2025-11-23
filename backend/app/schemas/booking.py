@@ -1,18 +1,21 @@
 from pydantic import BaseModel, Field
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, time
 from uuid import UUID
-
 
 # BOOKING SCHEMAS
 class CreateBookingRequest(BaseModel):
     """Request schema for creating a booking"""
     event_id: str = Field(..., min_length=1)
+    time_slot_start: Optional[str] = None  # Format: "09:00"
+    time_slot_end: Optional[str] = None    # Format: "10:00"
 
     class Config:
         json_schema_extra = {
             "example": {
-                "event_id": "123e4567-e89b-12d3-a456-426614174000"
+                "event_id": "123e4567-e89b-12d3-a456-426614174000",
+                "time_slot_start": "09:00",
+                "time_slot_end": "10:00"
             }
         }
 
@@ -24,8 +27,9 @@ class BookingResponse(BaseModel):
     booking_status: str
     booked_at: datetime
     cancelled_at: Optional[datetime] = None
-    # Nested event info
-    event: dict  # Will contain EventResponse data
+    time_slot_start: Optional[time] = None
+    time_slot_end: Optional[time] = None
+    event: dict
 
     class Config:
         from_attributes = True
@@ -36,6 +40,8 @@ class BookingResponse(BaseModel):
                 "booking_status": "confirmed",
                 "booked_at": "2025-10-22T14:30:00",
                 "cancelled_at": None,
+                "time_slot_start": "09:00:00",
+                "time_slot_end": "10:00:00",
                 "event": {
                     "id": "123e4567-e89b-12d3-a456-426614174000",
                     "name": "Free Cervical Cancer Screening - KL",
@@ -45,6 +51,8 @@ class BookingResponse(BaseModel):
                 }
             }
         }
+
+
 
 
 class BookingWithEventResponse(BaseModel):
