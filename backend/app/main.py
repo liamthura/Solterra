@@ -4,6 +4,7 @@ from app.routers import admin_auth, admin_routes
 from app.routers import participant_auth, participant_routes
 from app.routers import event
 from app.routers import results
+from app.routers import dashboard
 
 app = FastAPI(
     title="ROSE Event Management API",
@@ -38,3 +39,4 @@ app.include_router(participant_auth.router)
 app.include_router(participant_routes.router)
 app.include_router(event.router)
 app.include_router(results.router)
+app.include_router(dashboard.router)
