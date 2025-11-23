@@ -54,23 +54,27 @@ def book_event(
     db: Session = Depends(get_db),
     current_user: Participant = Depends(get_current_participant)
 ):
-    # Pass participant phone to service for SMS
+    # Pass time slot information
     booking = create_booking(
         db,
         participant_id=current_user.id,
-        participant_phone=current_user.phone_number,  # <-- Add phone number here
-        event_id=request.event_id
+        participant_phone=current_user.phone_number,
+        event_id=request.event_id,
+        time_slot_start=request.time_slot_start,
+        time_slot_end=request.time_slot_end
     )
     
-    # Ensure event relationship is loaded
+    # Load event relationship
     booking = db.query(Booking).options(joinedload(Booking.event)).filter_by(id=booking.id).first()
     
     booking_data = BookingResponse(
-        id=str(booking.id),
+        id=booking.id,
         booking_reference=booking.booking_reference,
         booking_status=booking.booking_status,
         booked_at=booking.booked_at,
         cancelled_at=booking.cancelled_at,
+        time_slot_start=booking.time_slot_start,
+        time_slot_end=booking.time_slot_end,
         event=EventResponse.from_orm(booking.event).model_dump()
     )
     

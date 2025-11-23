@@ -1,10 +1,23 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Calendar, Clock, Users } from 'lucide-react';
+import Toast from '@/components/ui/toast';
+import { 
+  Calendar, 
+  Clock, 
+  MapPin, 
+  CreditCard,
+  QrCode,
+  XCircle,
+  CheckCircle,
+  AlertCircle
+} from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react';
 
 interface Event {
   id: string;
@@ -19,261 +32,420 @@ interface Event {
 interface Booking {
   id: string;
   booking_reference: string;
-  booking_status: string; // confirmed, incomplete, waitlist
+  booking_status: string;
   booked_at: string;
-  cancelled_at?: string | null;
+  cancelled_at: string | null;
+  time_slot_start: string | null;
+  time_slot_end: string | null;
   event: Event;
 }
 
+type FilterType = 'all' | 'upcoming' | 'past' | 'cancelled';
+
 export default function MyBookingsPage() {
+  const router = useRouter();
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [filteredBookings, setFilteredBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [cancelingIds, setCancelingIds] = useState<Set<string>>(new Set());
-
-  const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-
-  const handleCancelBooking = async (bookingId: string) => {
-    if (!confirm('Are you sure you want to cancel this booking?')) return;
-
-    setCancelingIds((prev) => new Set(prev).add(bookingId));
-
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/participant/bookings/${bookingId}/cancel`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        alert(data.detail?.[0]?.msg || 'Failed to cancel booking');
-        return;
-      }
-
-      alert(data.message || 'Booking cancelled successfully');
-
-      // Update UI immediately
-      setBookings((prev) =>
-        prev.map((b) =>
-          b.id === bookingId
-            ? { ...b, booking_status: 'cancelled', cancelled_at: new Date().toISOString() }
-            : b
-        )
-      );
-    } catch (err) {
-      console.error(err);
-      alert('Failed to cancel booking. Please try again.');
-    } finally {
-      setCancelingIds((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(bookingId);
-        return newSet;
-      });
-    }
-  };
-
-  const handleLeaveWaitlist = async (bookingId: string) => {
-    if (!confirm('Are you sure you want to leave the waitlist?')) return;
-
-    setCancelingIds((prev) => new Set(prev).add(bookingId));
-
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/participant/bookings/${bookingId}/cancel`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        alert(data.detail?.[0]?.msg || 'Failed to leave waitlist');
-        return;
-      }
-
-      alert('You have left the waitlist successfully');
-
-      setBookings((prev) =>
-        prev.map((b) =>
-          b.id === bookingId
-            ? { ...b, booking_status: 'cancelled', cancelled_at: new Date().toISOString() }
-            : b
-        )
-      );
-    } catch (err) {
-      console.error(err);
-      alert('Failed to leave waitlist. Please try again.');
-    } finally {
-      setCancelingIds((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(bookingId);
-        return newSet;
-      });
-    }
-  };
+  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: 'success' | 'error';
+    show: boolean;
+  }>({
+    message: '',
+    type: 'success',
+    show: false,
+  });
 
   useEffect(() => {
+    fetchBookings();
+  }, []);
+
+  useEffect(() => {
+    filterBookings();
+  }, [activeFilter, bookings]);
+
+  const fetchBookings = async () => {
+    const token = localStorage.getItem('access_token');
+    
     if (!token) {
-      window.location.href = '/auth/login';
+      router.push('/auth/participant/login');
       return;
     }
 
-    const fetchBookings = async () => {
-      try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/participant/bookings`, {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/participant/bookings`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) throw new Error('Failed to fetch bookings');
+
+      const data: Booking[] = await res.json();
+      setBookings(data);
+      setFilteredBookings(data);
+    } catch (err: any) {
+      setToast({
+        message: err.message || 'Failed to load bookings',
+        type: 'error',
+        show: true,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filterBookings = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let filtered = [...bookings];
+
+    switch (activeFilter) {
+      case 'upcoming':
+        filtered = filtered.filter(
+          b => new Date(b.event.event_date) >= today && b.booking_status !== 'cancelled'
+        );
+        break;
+      case 'past':
+        filtered = filtered.filter(
+          b => new Date(b.event.event_date) < today && b.booking_status !== 'cancelled'
+        );
+        break;
+      case 'cancelled':
+        filtered = filtered.filter(b => b.booking_status === 'cancelled');
+        break;
+      default:
+        // 'all' - no filter
+        break;
+    }
+
+    setFilteredBookings(filtered);
+  };
+
+  const handleCancelBooking = async (bookingId: string, bookingRef: string) => {
+    setCancelingIds(prev => new Set(prev).add(bookingId));
+
+    try {
+      const token = localStorage.getItem('access_token');
+      
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/participant/bookings/${bookingId}/cancel`,
+        {
+          method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
           },
-        });
+        }
+      );
 
-        if (!res.ok) throw new Error('Failed to fetch bookings');
-
-        const data: Booking[] = await res.json();
-        setBookings(data);
-      } catch (err: any) {
-        setError(err.message || 'Error fetching bookings');
-      } finally {
-        setLoading(false);
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Failed to cancel booking');
       }
-    };
 
-    fetchBookings();
-  }, [token]);
+      const data = await res.json();
+      
+      setToast({
+        message: data.message || 'Booking cancelled successfully',
+        type: 'success',
+        show: true,
+      });
+
+      // Update local state
+      setBookings(prev =>
+        prev.map(b =>
+          b.id === bookingId
+            ? { ...b, booking_status: 'cancelled', cancelled_at: new Date().toISOString() }
+            : b
+        )
+      );
+
+      // Refresh bookings to get updated event slots
+      setTimeout(() => fetchBookings(), 1000);
+    } catch (err: any) {
+      setToast({
+        message: err.message || 'Failed to cancel booking',
+        type: 'error',
+        show: true,
+      });
+    } finally {
+      setCancelingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(bookingId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleShowQR = (booking: Booking) => {
+    setSelectedBooking(booking);
+    setShowQRModal(true);
+  };
+
+  const getStatusConfig = (booking: Booking) => {
+    const eventDate = new Date(booking.event.event_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (booking.booking_status === 'cancelled') {
+      return {
+        icon: XCircle,
+        color: 'bg-red-100 text-red-700 border-red-200',
+        text: 'Cancelled',
+      };
+    }
+
+    if (booking.booking_status === 'checked_in') {
+      return {
+        icon: CheckCircle,
+        color: 'bg-blue-100 text-blue-700 border-blue-200',
+        text: 'Checked In',
+      };
+    }
+
+    if (eventDate < today) {
+      return {
+        icon: CheckCircle,
+        color: 'bg-gray-100 text-gray-700 border-gray-200',
+        text: 'Completed',
+      };
+    }
+
+    return {
+      icon: CheckCircle,
+      color: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+      text: 'Confirmed',
+    };
+  };
 
   if (loading) {
     return (
-      <DashboardLayout title="My Bookings">
-        <p className="text-gray-500 text-center py-12">Loading bookings...</p>
-      </DashboardLayout>
+      <ProtectedRoute requiredRole="participant">
+        <DashboardLayout title="My Bookings">
+          <p className="text-gray-500 text-center py-12">Loading bookings...</p>
+        </DashboardLayout>
+      </ProtectedRoute>
     );
   }
 
-  if (error) {
-    return (
-      <DashboardLayout title="My Bookings">
-        <p className="text-red-600 text-center py-12">{error}</p>
-      </DashboardLayout>
-    );
-  }
+  const upcomingCount = bookings.filter(
+    b => new Date(b.event.event_date) >= new Date() && b.booking_status !== 'cancelled'
+  ).length;
+  const pastCount = bookings.filter(
+    b => new Date(b.event.event_date) < new Date() && b.booking_status !== 'cancelled'
+  ).length;
+  const cancelledCount = bookings.filter(b => b.booking_status === 'cancelled').length;
 
   return (
-    <DashboardLayout title="My Bookings">
-      {bookings.length === 0 ? (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <p className="text-gray-500">No bookings yet</p>
+    <ProtectedRoute requiredRole="participant">
+      <DashboardLayout title="My Bookings">
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          show={toast.show}
+          onClose={() => setToast({ ...toast, show: false })}
+        />
+
+        {/* QR Code Modal */}
+        {showQRModal && selectedBooking && (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            onClick={() => setShowQRModal(false)}
+          >
+            <Card className="max-w-sm" onClick={(e) => e.stopPropagation()}>
+              <CardContent className="p-6 text-center">
+                <h3 className="font-semibold text-lg mb-4">Check-in QR Code</h3>
+                <div className="bg-white p-4 rounded-lg inline-block mb-4">
+                  <QRCodeCanvas
+                    value={JSON.stringify({
+                      booking_id: selectedBooking.id,
+                      booking_ref: selectedBooking.booking_reference,
+                      event_id: selectedBooking.event.id,
+                    })}
+                    size={200}
+                  />
+                </div>
+                <p className="text-sm text-gray-600 mb-2">{selectedBooking.booking_reference}</p>
+                <p className="text-xs text-gray-500 mb-4">
+                  Show this QR code at the event for check-in
+                </p>
+                <Button
+                  onClick={() => setShowQRModal(false)}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Close
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold mb-4">My Bookings</h2>
+
+          {/* Filter Tabs */}
+          <div className="flex gap-2 mb-4">
             <Button
-              className="mt-4 bg-emerald-500 hover:bg-emerald-600"
-              onClick={() => (window.location.href = '/events')}
+              onClick={() => setActiveFilter('all')}
+              variant={activeFilter === 'all' ? 'default' : 'outline'}
+              className={activeFilter === 'all' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
             >
-              Browse Events
+              All ({bookings.length})
             </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4 max-w-4xl">
-          {bookings.map((booking) => {
-            const event = booking.event;
-            const isWaitlist = event.available_slots === 0 && booking.booking_status !== 'confirmed';
-            const isIncomplete = event.available_slots > 0 && booking.booking_status !== 'confirmed';
-            const isCancelled = booking.booking_status === 'cancelled';
-            const statusLabel = isCancelled
-              ? 'Cancelled'
-              : booking.booking_status === 'confirmed'
-              ? 'Confirmed'
-              : isIncomplete
-              ? 'Incomplete'
-              : 'Waitlist';
-            const statusColor = isCancelled
-              ? 'gray'
-              : booking.booking_status === 'confirmed'
-              ? 'green'
-              : isIncomplete
-              ? 'pink'
-              : 'gray';
-            const isCanceling = cancelingIds.has(booking.id);
+            <Button
+              onClick={() => setActiveFilter('upcoming')}
+              variant={activeFilter === 'upcoming' ? 'default' : 'outline'}
+              className={activeFilter === 'upcoming' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+            >
+              Upcoming ({upcomingCount})
+            </Button>
+            <Button
+              onClick={() => setActiveFilter('past')}
+              variant={activeFilter === 'past' ? 'default' : 'outline'}
+              className={activeFilter === 'past' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+            >
+              Past ({pastCount})
+            </Button>
+            <Button
+              onClick={() => setActiveFilter('cancelled')}
+              variant={activeFilter === 'cancelled' ? 'default' : 'outline'}
+              className={activeFilter === 'cancelled' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+            >
+              Cancelled ({cancelledCount})
+            </Button>
+          </div>
+        </div>
 
-            return (
-              <Card key={booking.id} className="border-gray-200">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      {/* Header */}
-                      <div className="flex items-start justify-between mb-3">
-                        <h3 className="text-lg font-semibold">{event.name}</h3>
-                        <span
-                          className={`text-xs font-medium px-3 py-1 rounded-full bg-${statusColor}-100 text-${statusColor}-600`}
-                        >
-                          {statusLabel}
-                        </span>
-                      </div>
+        {/* Bookings List */}
+        {filteredBookings.length === 0 ? (
+          <Card>
+            <CardContent className="p-12 text-center">
+              <p className="text-gray-500 mb-4">
+                {activeFilter === 'all' 
+                  ? 'No bookings yet' 
+                  : `No ${activeFilter} bookings`}
+              </p>
+              {activeFilter === 'all' && (
+                <Button
+                  onClick={() => router.push('/events')}
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                >
+                  Browse Events
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {filteredBookings.map((booking) => {
+              const statusConfig = getStatusConfig(booking);
+              const StatusIcon = statusConfig.icon;
+              const isCanceling = cancelingIds.has(booking.id);
+              const isCancelled = booking.booking_status === 'cancelled';
+              const eventDate = new Date(booking.event.event_date);
+              const isPast = eventDate < new Date();
 
-                      {/* Details */}
-                      <div className="space-y-2 text-sm text-gray-600">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4 text-emerald-600" />
-                          <span>
-                            {new Date(event.event_date).toLocaleDateString(undefined, {
-                              weekday: 'long',
-                              day: 'numeric',
-                              month: 'long',
-                            })}
+              return (
+                <Card key={booking.id} className={`hover:shadow-md transition-shadow ${isCancelled ? 'opacity-60' : ''}`}>
+                  <CardContent>
+                    <div className="flex items-center gap-6">
+                      
+                      {/* Status Badge */}
+                      <div className="flex-shrink-0">
+                        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${statusConfig.color}`}>
+                          <StatusIcon className="w-4 h-4" />
+                          <span className="text-sm font-medium whitespace-nowrap">
+                            {statusConfig.text}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-emerald-600" />
-                          {isWaitlist ? <span>Waiting in the queue</span> : <span>Start: {event.event_time.slice(0, 5)}</span>}
-                        </div>
-                        {isIncomplete && event.available_slots !== undefined && (
-                          <div className="flex items-center gap-2">
-                            <Users className="w-4 h-4 text-emerald-600" />
-                            <span className="font-medium text-emerald-600">{event.available_slots} spaces remaining</span>
+                      </div>
+
+                      {/* Booking Reference */}
+                      <div className="flex-shrink-0 w-32">
+                        <p className="text-xs text-gray-500 mb-1">Booking Ref</p>
+                        <p className="font-mono font-semibold text-sm">
+                          {booking.booking_reference}
+                        </p>
+                      </div>
+
+                      {/* Event Info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 mb-2 truncate">{booking.event.name}</p>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            <span>{new Date(booking.event.event_date).toLocaleDateString()}</span>
                           </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">Address:</span> {event.address}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">Booking Ref:</span> {booking.booking_reference}
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>
+                              {booking.time_slot_start && booking.time_slot_end
+                                ? `${booking.time_slot_start.slice(0, 5)} - ${booking.time_slot_end.slice(0, 5)}`
+                                : booking.event.event_time.slice(0, 5)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            <span className="truncate">{booking.event.address}</span>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Incomplete notice */}
-                      {isIncomplete && (
-                        <div className="mt-3 p-3 bg-pink-50 border border-pink-200 rounded-md">
-                          <p className="text-xs text-pink-700">
-                            Complete your booking by accepting the terms and conditions
-                          </p>
-                        </div>
-                      )}
-                    </div>
+                      {/* Booked Date */}
+                      <div className="flex-shrink-0 w-32">
+                        <p className="text-xs text-gray-500 mb-1">Booked On</p>
+                        <p className="text-sm text-gray-700">
+                          {new Date(booking.booked_at).toLocaleDateString()}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(booking.booked_at).toLocaleTimeString([], { 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                          })}
+                        </p>
+                      </div>
 
-                    {/* Action Buttons */}
-                    <div className="ml-6 flex flex-col gap-2">
-                      {!isCancelled && (
-                        <Button
-                          onClick={() => handleCancelBooking(booking.id)}
-                          disabled={isCanceling}
-                          className="bg-red-500 hover:bg-red-600"
-                        >
-                          {isCanceling ? 'Cancelling...' : isWaitlist ? 'Leave Waitlist' : 'Cancel Booking'}
-                        </Button>
-                      )}
+                      {/* Actions */}
+                      <div className="flex-shrink-0 flex gap-2">
+                        {!isCancelled && !isPast && (
+                          <Button
+                            onClick={() => handleShowQR(booking)}
+                            variant="outline"
+                            size="sm"
+                            className="border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+                          >
+                            <QrCode className="w-4 h-4" />
+                          </Button>
+                        )}
+                        
+                        {!isCancelled && !isPast && (
+                          <Button
+                            onClick={() => handleCancelBooking(booking.id, booking.booking_reference)}
+                            disabled={isCanceling}
+                            variant="outline"
+                            size="sm"
+                            className="text-red-600 border-red-300 hover:bg-red-50"
+                          >
+                            {isCanceling ? 'Cancelling...' : 'Cancel'}
+                          </Button>
+                        )}
+                      </div>
+
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-    </DashboardLayout>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </DashboardLayout>
+    </ProtectedRoute>
   );
 }

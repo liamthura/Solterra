@@ -5,7 +5,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, Calendar as CalendarIcon, PlusCircle } from 'lucide-react';
+import { Search, Calendar as CalendarIcon, MapPin, Clock, Users, ArrowRight, CheckCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Toast from '@/components/ui/toast';
 
@@ -32,7 +32,6 @@ export default function EventsPage() {
   const router = useRouter();
   const [events, setEvents] = useState<Event[]>([]);
   const [bookedEventIds, setBookedEventIds] = useState<Set<string>>(new Set());
-  const [bookingLoadingIds, setBookingLoadingIds] = useState<Set<string>>(new Set());
   const [searchLocation, setSearchLocation] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [loading, setLoading] = useState(true);
@@ -47,16 +46,36 @@ export default function EventsPage() {
     show: false,
   });
 
-  // Fetch events based on role
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        setUserRole(payload.role);
+        if (payload.role === 'participant') {
+          fetchParticipantBookings(token);
+        }
+      } catch (e) {
+        console.error('Failed to decode token:', e);
+      }
+    }
+    fetchEvents();
+  }, []);
+
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      const url =
-        userRole === 'admin'
-          ? `${process.env.NEXT_PUBLIC_API_URL}/events/?published_only=false`
-          : `${process.env.NEXT_PUBLIC_API_URL}/events/?published_only=true`;
+      const token = localStorage.getItem('access_token');
+      const url = userRole === 'admin'
+        ? `${process.env.NEXT_PUBLIC_API_URL}/events/?published_only=false`
+        : `${process.env.NEXT_PUBLIC_API_URL}/events/?published_only=true`;
 
-      const res = await fetch(url);
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(url, { headers });
       if (!res.ok) throw new Error('Failed to fetch events');
 
       const data = await res.json();
@@ -69,7 +88,6 @@ export default function EventsPage() {
     }
   };
 
-  // Fetch participant bookings
   const fetchParticipantBookings = async (token: string) => {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/participant/bookings`, {
@@ -83,94 +101,9 @@ export default function EventsPage() {
       setBookedEventIds(bookedIds);
     } catch (err) {
       console.error('Error fetching participant bookings:', err);
-      setToast({ message: 'Error fetching bookings', type: 'error', show: true });
     }
   };
 
-  // Book event handler
-  const handleBookEvent = async (eventId: string) => {
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      setToast({ message: 'You must be logged in to book.', type: 'error', show: true });
-      return;
-    }
-
-    setBookingLoadingIds((prev) => new Set(prev).add(eventId));
-
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/participant/bookings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ event_id: eventId }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        const errorMessage = Array.isArray(errData.detail)
-          ? errData.detail[0]?.msg
-          : errData.detail;
-        throw new Error(errorMessage || 'Failed to book event');
-      }
-
-      const result = await res.json();
-      setToast({ message: result.message || 'Booking successful!', type: 'success', show: true });
-
-      setBookedEventIds((prev) => new Set(prev).add(eventId));
-
-      setEvents((prevEvents) =>
-        prevEvents.map((event) =>
-          event.id === eventId
-            ? { ...event, available_slots: Math.max(event.available_slots - 1, 0) }
-            : event
-        )
-      );
-    } catch (err: any) {
-      setToast({ message: err.message || 'Error booking event', type: 'error', show: true });
-    } finally {
-      setBookingLoadingIds((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(eventId);
-        return newSet;
-      });
-    }
-  };
-
-  const handleDeleteEvent = async (eventId: string) => {
-    if (!window.confirm('Are you sure you want to delete this event? This action cannot be undone.')) {
-      return;
-    }
-
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      setToast({ message: 'You must be logged in to delete events.', type: 'error', show: true });
-      return;
-    }
-
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/events/${eventId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.detail || 'Failed to delete event');
-      }
-
-      setToast({ message: 'Event deleted successfully!', type: 'success', show: true });
-      // Refresh events after deletion
-      fetchEvents();
-    } catch (err: any) {
-      setToast({ message: err.message || 'Error deleting event', type: 'error', show: true });
-    }
-  };
-
-  // WhatsApp share
   const handleWhatsAppShare = (event: Event) => {
     const text = `Check out this event: ${event.name}\nDate: ${event.event_date} ${event.event_time}\nLocation: ${event.address}\n${event.additional_info || ''}`;
     const encodedText = encodeURIComponent(text);
@@ -181,23 +114,6 @@ export default function EventsPage() {
   const capacityPercentage = (current: number, total: number) => {
     return (current / total) * 100;
   };
-
-  useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        setUserRole(payload.role);
-        if (payload.role === 'participant') fetchParticipantBookings(token);
-      } catch (e) {
-        console.error('Failed to decode token:', e);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchEvents();
-  }, [userRole]);
 
   const filteredEvents = events.filter((event) => {
     const matchesLocation = event.address.toLowerCase().includes(searchLocation.toLowerCase());
@@ -214,14 +130,16 @@ export default function EventsPage() {
         onClose={() => setToast({ ...toast, show: false })}
       />
 
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex gap-4 items-end flex-1">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold mb-4">Browse Events</h2>
+        
+        <div className="flex gap-4 items-end">
           <div className="flex-1">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <Input
                 type="text"
-                placeholder="Enter a location/Postcode"
+                placeholder="Search by location..."
                 value={searchLocation}
                 onChange={(e) => setSearchLocation(e.target.value)}
                 className="pl-10 h-12"
@@ -241,118 +159,160 @@ export default function EventsPage() {
             </div>
           </div>
         </div>
-
-        {userRole === 'admin' && (
-          <Button
-            onClick={() => router.push('/events/create')}
-            className="ml-4 h-12 bg-emerald-500 hover:bg-emerald-600"
-          >
-            <PlusCircle className="mr-2 h-5 w-5" />
-            Create Event
-          </Button>
-        )}
       </div>
 
       {loading ? (
-        <p className="text-gray-500">Loading events...</p>
+        <div className="text-center py-12">
+          <p className="text-gray-500">Loading events...</p>
+        </div>
       ) : filteredEvents.length === 0 ? (
-        <p className="text-gray-500">No events found</p>
+        <Card>
+          <CardContent className="p-12 text-center">
+            <p className="text-gray-500 mb-4">No events found</p>
+            {(searchLocation || selectedDate) && (
+              <Button
+                onClick={() => {
+                  setSearchLocation('');
+                  setSelectedDate('');
+                }}
+                variant="outline"
+              >
+                Clear Filters
+              </Button>
+            )}
+          </CardContent>
+        </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {filteredEvents.map((event) => {
+            const bookedSlots = event.total_slots - event.available_slots;
+            const percentage = capacityPercentage(bookedSlots, event.total_slots);
             const isBooked = bookedEventIds.has(event.id);
-            const isBookingLoading = bookingLoadingIds.has(event.id);
 
             return (
               <Card
                 key={event.id}
-                className="border-gray-200 hover:shadow-md transition-shadow"
+                className="hover:shadow-lg transition-shadow"
               >
-                <CardContent className="p-6 flex flex-col md:flex-row md:items-center justify-between">
-                  <div className="flex-1 mb-4 md:mb-0">
-                    <h3 className="text-lg font-semibold mb-2">{event.name}</h3>
-                    <p className="text-sm text-gray-600 mb-1">
-                      {event.event_date} • {event.event_time}
-                    </p>
-                    <p className="text-sm text-gray-600 mb-2">{event.address}</p>
+                <CardContent>
+                  <div className="flex items-start justify-between gap-6">
+                    <div className="flex-1">
+                      <h3 className="text-xl font-bold text-gray-900 mb-3">{event.name}</h3>
 
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-gray-600 min-w-[80px]">Capacity:</span>
-                      <div className="flex-1 max-w-xs">
+                      <div className="space-y-2 mb-4">
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <CalendarIcon className="w-4 h-4 text-emerald-600" />
+                          <span className="text-sm">
+                            {new Date(event.event_date).toLocaleDateString('en-US', {
+                              weekday: 'long',
+                              day: 'numeric',
+                              month: 'long',
+                              year: 'numeric',
+                            })}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Clock className="w-4 h-4 text-emerald-600" />
+                          <span className="text-sm">{event.event_time.slice(0, 5)} onwards</span>
+                        </div>
+
+                        <div className="flex items-start gap-2 text-gray-600">
+                          <MapPin className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+                          <span className="text-sm">{event.address}</span>
+                        </div>
+                      </div>
+
+                      {/* Capacity Bar */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-gray-600 flex items-center gap-1">
+                            <Users className="w-3 h-3" />
+                            Capacity
+                          </span>
+                          <span className="text-xs font-medium text-gray-900">
+                            {bookedSlots} / {event.total_slots} booked
+                            {event.available_slots > 0 && (
+                              <span className="text-emerald-600 ml-1">
+                                ({event.available_slots} spots left)
+                              </span>
+                            )}
+                          </span>
+                        </div>
                         <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                           <div
                             className={`h-full transition-all ${
-                              event.available_slots === 0 ? 'bg-rose-500' : 'bg-emerald-500'
+                              event.available_slots === 0
+                                ? 'bg-red-500'
+                                : percentage >= 80
+                                ? 'bg-amber-500'
+                                : 'bg-emerald-500'
                             }`}
-                            style={{
-                              width: `${capacityPercentage(
-                                event.total_slots - event.available_slots,
-                                event.total_slots
-                              )}%`,
-                            }}
+                            style={{ width: `${percentage}%` }}
                           />
                         </div>
                       </div>
-                      <span className="text-sm font-medium min-w-[60px]">
-                        {event.total_slots - event.available_slots}/{event.total_slots}
-                      </span>
                     </div>
-                  </div>
 
-                  <div className="flex flex-col gap-2 md:ml-6">
-                    <Button
-                      variant="outline"
-                      onClick={() => router.push(`/events/${event.id}`)}
-                      className="border-emerald-500 text-emerald-600 hover:bg-emerald-50"
-                    >
-                      Details
-                    </Button>
-
-                    {userRole === 'admin' && (
-                      <>
+                    {/* Action Area */}
+                    <div className="flex flex-col items-end gap-3 min-w-[160px]">
+                      {userRole === 'participant' ? (
+                        <>
+                          {isBooked ? (
+                            <Button
+                              onClick={() => router.push('/bookings')}
+                              className="w-full bg-gray-500 hover:bg-gray-600 text-white font-semibold"
+                            >
+                              <CheckCircle className="w-4 h-4 mr-2" />
+                              Already Booked
+                            </Button>
+                          ) : event.available_slots === 0 ? (
+                            <Button
+                              disabled
+                              className="w-full bg-red-100 text-red-700 font-semibold cursor-not-allowed"
+                            >
+                              Fully Booked
+                            </Button>
+                          ) : (
+                            <Button
+                              onClick={() => router.push(`/events/${event.id}`)}
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
+                            >
+                              Book Now
+                              <ArrowRight className="w-4 h-4 ml-2" />
+                            </Button>
+                          )}
+                        </>
+                      ) : userRole === 'admin' ? (
                         <Button
-                            onClick={() => router.push(`/admin/events/${event.id}/edit`)}
-                            className="bg-blue-500 hover:bg-blue-600 text-white"
+                          onClick={() => router.push(`/admin/events/${event.id}`)}
+                          variant="outline"
+                          className="w-full"
                         >
-                            Edit
+                          Manage Event
                         </Button>
+                      ) : (
                         <Button
-                            onClick={() => handleDeleteEvent(event.id)}
-                            className="bg-red-500 hover:bg-red-600 text-white"
+                          onClick={() => router.push(`/events/${event.id}`)}
+                          variant="outline"
+                          className="w-full border-emerald-500 text-emerald-600 hover:bg-emerald-50"
                         >
-                            Delete
+                          View Details
                         </Button>
-                      </>
-                    )}
+                      )}
 
-                    {userRole === 'participant' && (
-                      <>
-                        {isBooked ? (
-                          <Button disabled className="bg-gray-400 text-white">
-                            Booked
-                          </Button>
-                        ) : event.available_slots === 0 ? (
-                          <Button disabled className="bg-gray-300 text-white">Full</Button>
-                        ) : (
-                          <Button
-                            onClick={() => handleBookEvent(event.id)}
-                            disabled={isBookingLoading}
-                            className={`bg-emerald-500 hover:bg-emerald-600 ${
-                              isBookingLoading ? 'opacity-50 cursor-not-allowed' : ''
-                            }`}
-                          >
-                            {isBookingLoading ? 'Booking...' : 'Book'}
-                          </Button>
-                        )}
-                      </>
-                    )}
-
-                    <Button
-                      onClick={() => handleWhatsAppShare(event)}
-                      className="bg-emerald-500 hover:bg-emerald-600 text-white"
-                    >
-                      Share via WhatsApp
-                    </Button>
+                      <Button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleWhatsAppShare(event);
+                        }}
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                      >
+                        Share via WhatsApp
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

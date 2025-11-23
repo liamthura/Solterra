@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, UniqueConstraint
+from sqlalchemy import Column, String, DateTime, UniqueConstraint,Time
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy import ForeignKey
@@ -19,7 +19,8 @@ class Booking(Base):
     booked_at = Column(DateTime, default=datetime.utcnow)
     cancelled_at = Column(DateTime, nullable=True)
     test_result = relationship("TestResult", back_populates="booking", uselist=False)
-
+    time_slot_start = Column(Time, nullable=True)
+    time_slot_end = Column(Time, nullable=True)
     # Relationships
     participant = relationship("Participant", back_populates="bookings")
     event = relationship("Event", back_populates="bookings")
