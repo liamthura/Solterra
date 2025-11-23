@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Date, Time, Text, DateTime, Numeric
+from sqlalchemy import Column, String, Integer, Date, Time, Text, DateTime, Numeric,JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy import ForeignKey
@@ -24,6 +24,7 @@ class Event(Base):
     address = Column(Text, nullable=False)
     latitude = Column(Numeric(10, 8))
     longitude = Column(Numeric(11, 8))
+    time_slots = Column(JSON, nullable=True)  # Format: [{"start": "09:00", "end": "10:00", "slots": 20, "available": 15}]
     total_slots = Column(Integer, nullable=False)
     available_slots = Column(Integer, nullable=False)
     additional_info = Column(Text)
