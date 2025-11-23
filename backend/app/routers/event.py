@@ -164,3 +164,28 @@ def export_event_participants(
     )
     response.headers["Content-Disposition"] = f"attachment; filename=participants_{event_id}.csv"
     return response
+
+@router.get("/{event_id}/time-slots")
+def get_event_time_slots(event_id: str, db: Session = Depends(get_db)):
+    """Get available time slots for an event"""
+    event = db.query(Event).filter(Event.id == event_id).first()
+    
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    if not event.time_slots:
+        # No time slots configured, return single slot based on event_time
+        return {
+            "has_time_slots": False,
+            "slots": [{
+                "start": str(event.event_time.strftime("%H:%M")),
+                "end": "16:00",  # Default end time
+                "slots": event.total_slots,
+                "available": event.available_slots
+            }]
+        }
+    
+    return {
+        "has_time_slots": True,
+        "slots": event.time_slots
+    }
