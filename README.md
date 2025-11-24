@@ -4,10 +4,18 @@ A comprehensive event management platform for ROSE Foundation, a Malaysian NGO p
 
 
 ## Getting Started
+start by cloning the github repo 
+```bash
+git clone https://github.com/itsdiy0/Solterra
+```
 
 ### Backend Setup
 ```bash
 cd backend
+
+# Initialise virtual enviornment
+virtualenv venv
+source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
