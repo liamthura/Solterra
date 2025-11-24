@@ -8,10 +8,12 @@ start by cloning the github repo
 ```bash
 git clone https://github.com/itsdiy0/Solterra
 ```
-
 ### Backend Setup
 ```bash
 cd backend
+
+# Run Postgres
+docker-compose up -d 
 
 # Initialise virtual enviornment
 virtualenv venv
