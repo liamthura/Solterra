@@ -23,9 +23,12 @@ from app.utils.security import get_current_admin, get_current_participant
 from app.services.file_upload_service import file_upload_service
 from app.services.sms_service import send_result_notification_sms
 from app.services.otp_service import create_otp_record, verify_otp
+from pydantic import BaseModel
 
 router = APIRouter(tags=["Results"])
 
+class VerifyOTPRequest(BaseModel):
+    otp_code: str
 
 # ADMIN ROUTES
 @router.post("/admin/results", response_model=ResultResponse)
@@ -247,11 +250,10 @@ def request_result_otp(
         phone_number=current_participant.phone_number
     )
 
-
 @router.post("/participant/results/{result_id}/view", response_model=ViewResultResponse)
 def view_result_with_otp(
     result_id: UUID,
-    otp_code: str,
+    request: VerifyOTPRequest,  # ✅ Use Pydantic model
     db: Session = Depends(get_db),
     current_participant: Participant = Depends(get_current_participant)
 ):
@@ -272,7 +274,7 @@ def view_result_with_otp(
     is_valid = verify_otp(
         db=db,
         phone_number=current_participant.phone_number,
-        otp_code=otp_code,
+        otp_code=request.otp_code,  # ✅ Use request.otp_code
         purpose="result_access"
     )
     
@@ -282,15 +284,12 @@ def view_result_with_otp(
     # Generate time-limited signed URL for PDF (1 hour validity)
     secure_url = None
     if result.result_file_url:
-        # Extract public_id from Cloudinary URL
-        # Format: https://res.cloudinary.com/{cloud}/raw/upload/v123/test_results/{booking_id}/filename
-        # We need: test_results/{booking_id}/filename
         url_parts = result.result_file_url.split('/upload/')
         if len(url_parts) > 1:
-            public_id = url_parts[1].split('.')[0]  # Remove extension
+            public_id = url_parts[1].split('.')[0]
             secure_url = file_upload_service.generate_signed_url(public_id, expires_in_hours=1)
         else:
-            secure_url = result.result_file_url  # Fallback
+            secure_url = result.result_file_url
     
     return ViewResultResponse(
         result_category=result.result_category,
