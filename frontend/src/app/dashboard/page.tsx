@@ -7,9 +7,9 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Toast from '@/components/ui/toast';
-import { 
-  Calendar, 
-  Clock, 
+import {
+  Calendar,
+  Clock,
   MapPin,
   FileText,
   CheckCircle,
@@ -69,7 +69,7 @@ export default function ParticipantDashboardPage() {
 
   const fetchDashboardData = async () => {
     const token = localStorage.getItem('access_token');
-    
+
     try {
       // Fetch upcoming published events
       const eventsRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/events?published_only=true`);
@@ -143,13 +143,13 @@ export default function ParticipantDashboardPage() {
         />
 
         <div className="space-y-6">
-          
+
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Upcoming Events Card */}
             <Card className="relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-pink-500/20 to-transparent rounded-full -mr-16 -mt-16" />
-              <CardContent className="p-6">
+              <CardContent>
                 <div className="flex items-center justify-between mb-3">
                   <div className="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center">
                     <Calendar className="w-6 h-6 text-pink-600" />
@@ -181,7 +181,7 @@ export default function ParticipantDashboardPage() {
             {/* Test Results Card */}
             <Card className="relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-500/20 to-transparent rounded-full -mr-16 -mt-16" />
-              <CardContent className="p-6">
+              <CardContent>
                 <div className="flex items-center justify-between mb-3">
                   <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                     <FileText className="w-6 h-6 text-blue-600" />
@@ -197,10 +197,10 @@ export default function ParticipantDashboardPage() {
 
           {/* Main Content Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
+
             {/* Upcoming Events */}
             <Card>
-              <CardContent className="p-6">
+              <CardContent>
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-lg font-semibold text-gray-900">Upcoming Events</h3>
                   <Button
@@ -232,10 +232,10 @@ export default function ParticipantDashboardPage() {
                       >
                         <h4 className="font-semibold text-white mb-2">{event.name}</h4>
                         <div className="flex justify-between items-center text-white text-sm">
-                          <span>{new Date(event.event_date).toLocaleDateString('en-US', { 
-                            weekday: 'short', 
-                            day: 'numeric', 
-                            month: 'short' 
+                          <span>{new Date(event.event_date).toLocaleDateString('en-US', {
+                            weekday: 'short',
+                            day: 'numeric',
+                            month: 'short'
                           })}</span>
                           <span>{event.event_time.slice(0, 5)} onwards</span>
                         </div>
@@ -248,7 +248,7 @@ export default function ParticipantDashboardPage() {
 
             {/* My Bookings */}
             <Card>
-              <CardContent className="p-6">
+              <CardContent>
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-lg font-semibold text-gray-900">My Bookings</h3>
                   <Button
@@ -273,7 +273,7 @@ export default function ParticipantDashboardPage() {
                 ) : (
                   <div className="space-y-3">
                     {myBookings.map((booking) => {
-                      const statusConfig = booking.booking_status === 'checked_in' 
+                      const statusConfig = booking.booking_status === 'checked_in'
                         ? { bg: 'bg-blue-100', border: 'border-blue-200', text: 'text-blue-700', label: 'Checked In' }
                         : { bg: 'bg-emerald-100', border: 'border-emerald-200', text: 'text-emerald-700', label: 'Confirmed' };
 
@@ -314,7 +314,7 @@ export default function ParticipantDashboardPage() {
 
           {/* Test Results Section */}
           <Card>
-            <CardContent className="p-6">
+            <CardContent>
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-gray-900">Recent Test Results</h3>
                 <Button
@@ -347,11 +347,10 @@ export default function ParticipantDashboardPage() {
                       <div className="flex items-start justify-between mb-2">
                         <h4 className="font-semibold text-gray-900">{result.event_name}</h4>
                         <span
-                          className={`text-xs px-3 py-1 rounded-full font-medium ${
-                            result.result_category === 'Normal'
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-red-100 text-red-700'
-                          }`}
+                          className={`text-xs px-3 py-1 rounded-full font-medium ${result.result_category === 'Normal'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-red-100 text-red-700'
+                            }`}
                         >
                           {result.result_category}
                         </span>
@@ -373,7 +372,7 @@ export default function ParticipantDashboardPage() {
 
           {/* Quick Actions */}
           <Card>
-            <CardContent className="p-6">
+            <CardContent>
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <button
