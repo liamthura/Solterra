@@ -1,7 +1,6 @@
 services:
   postgres:
-    image: postgres:15
-
+    image: 'postgres:15'
     container_name: rose_postgres
     restart: unless-stopped
     environment:
@@ -9,14 +8,39 @@ services:
       POSTGRES_PASSWORD: rose_password
       POSTGRES_DB: rose_db
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - '${DB_PORT:-5432}:5432'
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - 'postgres_data:/var/lib/postgresql/data'
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rose_user -d rose_db"]
+      test:
+        - CMD-SHELL
+        - 'pg_isready -U rose_user -d rose_db'
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - app-network
+
+  backend:
+    build: .
+    container_name: rose_backend
+    restart: unless-stopped
+    ports:
+      - '8000:8000'
+    environment:
+      - DATABASE_URL=postgresql://rose_user:rose_password@postgres:5432/rose_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000
+    networks:
+      - app-network
+    labels:
+      - "coolify.managed=true"
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   postgres_data:
