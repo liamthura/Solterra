@@ -18,7 +18,9 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "https://solterra.thuradev.qzz.io",
-        "https://solterra-api.thuradev.qzz.io"
+        "https://solterra-api.thuradev.qzz.io",
+        "http://solterra.thuradev.qzz.io",
+        "http://solterra-api.thuradev.qzz.io"
     ],  # Next.js dev server
     allow_credentials=True,
     allow_methods=["*"],
