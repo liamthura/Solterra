@@ -15,11 +15,7 @@ app = FastAPI(
 # CORS middleware (allow frontend to access backend)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://solterra.thuradev.qzz.io",
-        "https://solterra-api.thuradev.qzz.io",
-    ],  # Next.js dev server
+    allow_origins=["*"],  # Next.js dev server
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
