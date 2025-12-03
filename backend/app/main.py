@@ -10,7 +10,7 @@ app = FastAPI(
     title="ROSE Event Management API",
     description="API for ROSE Foundation mobile health screening events",
     version="1.0.0",
-    redirect_slashes=False
+    redirect_slashes=True
 )
 
 # CORS middleware (allow frontend to access backend)

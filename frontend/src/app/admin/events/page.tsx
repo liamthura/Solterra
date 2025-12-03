@@ -33,7 +33,7 @@ export default function AdminEventsPage() {
     const token = localStorage.getItem('access_token');
     
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/events/?published_only=false`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/events?published_only=false`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
