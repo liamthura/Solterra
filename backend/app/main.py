@@ -9,8 +9,7 @@ from app.routers import dashboard
 app = FastAPI(
     title="ROSE Event Management API",
     description="API for ROSE Foundation mobile health screening events",
-    version="1.0.0",
-    redirect_slashes=True
+    version="1.0.0"
 )
 
 # CORS middleware (allow frontend to access backend)
